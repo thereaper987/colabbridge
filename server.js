@@ -129,7 +129,7 @@ async function initColabBinary() {
 }
 
 // ============================================
-// COLAB CLI RUNNER (Enhanced)
+// COLAB CLI RUNNER (Enhanced - Fixed)
 // ============================================
 
 async function runColabCli(args, options = {}) {
@@ -143,12 +143,20 @@ async function runColabCli(args, options = {}) {
 
     return new Promise((resolve, reject) => {
         let command;
-        const escapedArgs = args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ');
+        
+        // Build command properly - handle args with spaces by quoting only those
+        const formattedArgs = args.map(arg => {
+            // If arg contains spaces or special characters, quote it
+            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('\\')) {
+                return `"${arg.replace(/"/g, '\\"')}"`;
+            }
+            return arg;
+        }).join(' ');
         
         if (USE_PYTHON_MODULE) {
-            command = `${COLAB_BINARY} -m colab_cli ${escapedArgs}`;
+            command = `${COLAB_BINARY} -m colab_cli ${formattedArgs}`;
         } else {
-            command = `${COLAB_BINARY} ${escapedArgs}`;
+            command = `${COLAB_BINARY} ${formattedArgs}`;
         }
         
         console.log(`Running: ${command}`);
@@ -171,6 +179,8 @@ async function runColabCli(args, options = {}) {
         exec(command, execOptions, (error, stdout, stderr) => {
             if (error && error.code !== 0) {
                 console.error(`Command failed: ${error.message}`);
+                console.error(`Stdout: ${stdout}`);
+                console.error(`Stderr: ${stderr}`);
                 reject({ error, stdout, stderr });
             } else {
                 resolve({ stdout, stderr });
