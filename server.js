@@ -2685,7 +2685,7 @@ app.get('/help', (req, res) => {
 // AUTH PROTECTED ENDPOINTS
 // ============================================
 
-// 1. Create new session (flexible) - WITH AUTO CLEANUP
+// 1. Create new session (flexible) - WITH AUTO CLEANUP & FIXED GPU HANDLING
 app.post('/session/new', async (req, res) => {
     const apiSecret = extractApiSecret(req);
     if (!validateApiSecret(apiSecret)) {
@@ -2731,7 +2731,8 @@ app.post('/session/new', async (req, res) => {
                 }
             }
 
-            console.log(`📝 New session request received with ${accelerator === 'NONE' ? 'CPU' : accelerator}`);
+            const hardwareDisplay = accelerator === 'NONE' ? 'CPU' : accelerator;
+            console.log(`📝 New session request received with ${hardwareDisplay}`);
             const sessionId = generateSessionId();
             const colabSessionName = `colab_${sessionId.substring(0, 12)}`;
 
@@ -2748,10 +2749,29 @@ app.post('/session/new', async (req, res) => {
             const dataFile = path.join(path.join(SESSIONS_BASE_DIR, sessionId), 'session_data.json');
             await fs.writeFile(dataFile, JSON.stringify(initialData, null, 2));
             
-            console.log(`⏳ Creating Colab session: ${colabSessionName} with ${accelerator}`);
+            console.log(`⏳ Creating Colab session: ${colabSessionName} with ${hardwareDisplay}`);
+            
+            // ============================================
+            // FIX: Build command properly - only add --gpu/--tpu if needed
+            // ============================================
+            const cliArgs = ['new', '-s', colabSessionName];
+            
+            // Only add --gpu if accelerator is not NONE
+            if (accelerator !== 'NONE') {
+                cliArgs.push('--gpu', accelerator);
+            }
+            // If tpu was specified, use --tpu instead
+            if (tpu) {
+                // Remove any --gpu that might have been added
+                const gpuIndex = cliArgs.indexOf('--gpu');
+                if (gpuIndex !== -1) {
+                    cliArgs.splice(gpuIndex, 2);
+                }
+                cliArgs.push('--tpu', tpu.toUpperCase());
+            }
             
             try {
-                await runColabCli(['new', '--gpu', accelerator, '-s', colabSessionName], 60000);
+                await runColabCli(cliArgs, 60000);
             } catch (error) {
                 // Check if it's a TooManyAssignmentsError or Precondition Failed
                 const errorMessage = error.message || '';
@@ -2807,7 +2827,7 @@ app.post('/session/new', async (req, res) => {
                 status: 'ready',
                 currentExecution: null,
                 folder: path.join(SESSIONS_BASE_DIR, sessionId),
-                hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
+                hardware: hardwareDisplay,
                 variant: variant,
                 gpu: gpu || null,
                 tpu: tpu || null
@@ -2817,13 +2837,13 @@ app.post('/session/new', async (req, res) => {
             return res.json({
                 success: true,
                 sessionId: sessionId,
-                hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
+                hardware: hardwareDisplay,
                 variant: variant,
                 authUrl: null,
                 expiresIn: SESSION_TIMEOUT,
                 activeSessions: sessions.size,
                 maxSessions: MAX_SESSIONS,
-                message: `Session created with ${accelerator === 'NONE' ? 'CPU' : accelerator}`
+                message: `Session created with ${hardwareDisplay}`
             });
             
         } catch (error) {
@@ -2839,7 +2859,6 @@ app.post('/session/new', async (req, res) => {
                  combinedError.includes('412')) && retryCount < MAX_RETRIES - 1) {
                 
                 // Clean up any partially created session folder
-                // The folder might not exist yet, but try anyway
                 try {
                     const sessionId = generateSessionId(); // Placeholder
                     await cleanupSessionFolder(sessionId);
@@ -4310,6 +4329,7 @@ app.post('/start', async (req, res) => {
         
         try {
             const { variant, accelerator } = resolveHardware(DEFAULT_GPU, null);
+            const hardwareDisplay = accelerator === 'NONE' ? 'CPU' : accelerator;
             
             if (sessions.size >= MAX_SESSIONS) {
                 let oldestSessionId = null;
@@ -4348,7 +4368,14 @@ app.post('/start', async (req, res) => {
             const dataFile = path.join(path.join(SESSIONS_BASE_DIR, sessionId), 'session_data.json');
             await fs.writeFile(dataFile, JSON.stringify(initialData, null, 2));
             
-            await runColabCli(['new', '--gpu', accelerator, '-s', colabSessionName], 60000);
+            // ============================================
+            // FIX: Build command properly - only add --gpu if not NONE
+            // ============================================
+            const cliArgs = ['new', '-s', colabSessionName];
+            if (accelerator !== 'NONE') {
+                cliArgs.push('--gpu', accelerator);
+            }
+            await runColabCli(cliArgs, 60000);
             
             sessions.set(sessionId, {
                 colabSession: colabSessionName,
@@ -4357,7 +4384,7 @@ app.post('/start', async (req, res) => {
                 status: 'ready',
                 currentExecution: null,
                 folder: path.join(SESSIONS_BASE_DIR, sessionId),
-                hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
+                hardware: hardwareDisplay,
                 variant: variant,
                 gpu: DEFAULT_GPU,
                 tpu: null
@@ -4366,13 +4393,13 @@ app.post('/start', async (req, res) => {
             res.json({
                 success: true,
                 sessionId: sessionId,
-                hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
+                hardware: hardwareDisplay,
                 variant: variant,
                 authUrl: null,
                 expiresIn: SESSION_TIMEOUT,
                 activeSessions: sessions.size,
                 maxSessions: MAX_SESSIONS,
-                message: `Session created with ${accelerator === 'NONE' ? 'CPU' : accelerator}`
+                message: `Session created with ${hardwareDisplay}`
             });
         } catch (error) {
             console.error('❌ Session creation failed:', error.message);
