@@ -770,6 +770,1894 @@ app.get('/sessions/:identifier', async (req, res) => {
 });
 
 // ============================================
+// HELP ENDPOINT (Public - No Auth Required)
+// ============================================
+
+/**
+ * GET /help
+ * Returns comprehensive API documentation for AI agents and developers.
+ * This endpoint explains every available endpoint, their purpose, request/response formats,
+ * authentication requirements, and provides usage examples.
+ */
+app.get('/help', (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    res.json({
+        server: {
+            name: "ColabBridge API",
+            version: "2.1.0",
+            description: "A REST API wrapper around Google Colab CLI that enables remote execution of Python code on Colab VMs",
+            baseUrl: baseUrl,
+            documentation: "This help endpoint provides complete API documentation for AI agents and developers",
+            lastUpdated: new Date().toISOString()
+        },
+        authentication: {
+            description: "Most endpoints require an API secret for authentication. The secret can be sent in multiple ways:",
+            methods: [
+                {
+                    method: "Request Body",
+                    description: "Include 'api_secret' in the JSON body of POST requests",
+                    example: '{"api_secret": "your-secret", ...otherFields}'
+                },
+                {
+                    method: "HTTP Header",
+                    description: "Send 'api-secret' header with the secret value",
+                    example: "api-secret: your-secret"
+                },
+                {
+                    method: "HTTP Header (Alternative)",
+                    description: "Send 'x-api-secret' header with the secret value",
+                    example: "x-api-secret: your-secret"
+                }
+            ],
+            publicEndpoints: [
+                "GET /health",
+                "GET /health/simple",
+                "GET /help",
+                "GET /sessions",
+                "GET /sessions/:identifier"
+            ],
+            note: "The API secret is configured via the API_SECRET environment variable."
+        },
+        environmentVariables: {
+            API_SECRET: "Your API secret for authentication (required)",
+            COLAB_AUTH_TOKEN: "Google Colab authentication token in JSON format (required)",
+            COLAB_REFRESH_DATA: "Refresh data extracted from token.json (optional)",
+            PORT: "Server port (default: 3000)",
+            NODE_ENV: "Environment mode: development/production (default: development)",
+            LOG_LEVEL: "Logging verbosity: info/debug/error (default: info)",
+            DEBUG_ENABLED: "Enable debug mode (default: true)",
+            MAX_SESSIONS: "Maximum concurrent sessions (default: 3)",
+            SESSION_TIMEOUT: "Session idle timeout in milliseconds (default: 10800000 = 3 hours)",
+            SESSIONS_BASE_DIR: "Session storage directory (default: /tmp/colab_sessions)",
+            PERSIST_SESSION_DATA: "Persist session data to disk (default: true)",
+            CLEANUP_INTERVAL: "Idle session cleanup interval in milliseconds (default: 3600000 = 1 hour)",
+            EXECUTION_TIMEOUT: "Default execution timeout in seconds (default: 7200 = 2 hours)",
+            MAX_CODE_SIZE: "Maximum code size in bytes (default: 3145728 = 3 MB)",
+            MAX_CODE_LENGTH: "Maximum code length in characters (default: 100000)",
+            MAX_RETRY_ATTEMPTS: "Retry attempts for failed executions (default: 3)",
+            STREAMING_ENABLED: "Enable streaming output (default: true)",
+            COMPLETED_EXECUTIONS_TTL: "Keep completed executions in memory in milliseconds (default: 1200000 = 20 minutes)",
+            POLL_INTERVAL: "Recommended polling interval in milliseconds (default: 10000 = 10 seconds)",
+            HANGING_PROCESS_CLEANUP_INTERVAL: "Hanging process cleanup interval in milliseconds (default: 900000 = 15 minutes)",
+            DEFAULT_GPU: "Default GPU if none specified (default: T4)",
+            ENABLE_GPU_FLEXIBILITY: "Allow GPU/TPU selection per session (default: true)",
+            ENABLE_FILE_OPS: "Enable file operation endpoints (default: true)",
+            ENABLE_AUTOMATION: "Enable automation endpoints (default: true)",
+            ENABLE_EPHEMERAL_RUN: "Enable colab run command (default: true)",
+            ENABLE_HISTORY_EXPORT: "Enable history export (default: true)",
+            ENABLE_SESSION_PERSISTENCE: "Persist session data to disk (default: true)",
+            HISTORY_MAX_EVENTS: "Max events to keep in history (default: 1000)",
+            HISTORY_EXPORT_FORMATS: "Allowed export formats (default: ipynb,md,txt,jsonl)",
+            HISTORY_AUTO_CLEANUP: "Auto-cleanup old history (default: true)",
+            RATE_LIMIT_ENABLED: "Enable rate limiting (default: false)",
+            RATE_LIMIT_WINDOW: "Rate limit window in milliseconds (default: 60000)",
+            RATE_LIMIT_MAX_REQUESTS: "Max requests per window (default: 1000)",
+            API_SECRET_ROTATION_INTERVAL: "Secret rotation interval in milliseconds (default: 2592000000 = 30 days)",
+            ENABLE_CORS: "Enable CORS (default: true)",
+            CORS_ALLOWED_ORIGINS: "Comma-separated list of allowed origins",
+            MAX_CONCURRENT_EXECUTIONS: "Max concurrent executions (default: 3)",
+            EXECUTION_QUEUE_TIMEOUT: "Queue timeout in milliseconds (default: 300000 = 5 minutes)",
+            CLEANUP_BATCH_SIZE: "Batch size for cleanup (default: 10)",
+            LOG_MAX_SIZE: "Max log file size in bytes (default: 10485760 = 10 MB)",
+            LOG_MAX_FILES: "Max log files to keep (default: 5)",
+            ENABLE_REQUEST_LOGGING: "Log all requests (default: true)",
+            ENABLE_ERROR_LOGGING: "Log all errors (default: true)"
+        },
+        endpoints: {
+            // ============================================
+            // PUBLIC ENDPOINTS
+            // ============================================
+            health: {
+                method: "GET",
+                path: "/health",
+                authRequired: false,
+                purpose: "Full health check - Returns detailed server status, memory usage, active sessions, and Colab CLI configuration",
+                request: {
+                    format: "No request body required",
+                    headers: "None required"
+                },
+                response: {
+                    format: "JSON",
+                    fields: {
+                        status: "Always 'healthy' if server is running",
+                        activeSessions: "Number of active Colab sessions",
+                        maxSessions: "Maximum sessions allowed (configurable via MAX_SESSIONS)",
+                        sessionDetails: "Array of session objects with truncated IDs",
+                        sessionDetails_id: "Truncated session ID (first 12 chars + '...')",
+                        sessionDetails_colabSession: "Internal Colab session name",
+                        sessionDetails_createdAt: "Session creation timestamp",
+                        sessionDetails_lastActivity: "Last activity timestamp",
+                        sessionDetails_status: "Session status: 'ready', 'busy', or 'auth_required'",
+                        sessionDetails_hardware: "Hardware type: 'CPU', 'T4', 'A100', etc.",
+                        sessionDetails_hasCurrentExecution: "Whether a code execution is running",
+                        completedExecutions: "Number of completed executions in memory",
+                        queuedExecutions: "Number of executions waiting to run",
+                        uptime: "Server uptime in seconds",
+                        memoryUsage: "Memory usage breakdown",
+                        memoryUsage_rss: "Resident Set Size",
+                        memoryUsage_heapTotal: "Total heap size",
+                        memoryUsage_heapUsed: "Used heap size",
+                        memoryUsage_external: "External memory",
+                        memoryUsage_arrayBuffers: "Array buffers memory",
+                        timestamp: "Current server time in ISO format",
+                        colabBinary: "Path to Colab CLI binary being used",
+                        usePythonModule: "Whether Python module is being used instead of binary",
+                        hasAuthToken: "Whether COLAB_AUTH_TOKEN is configured"
+                    }
+                },
+                usage: {
+                    curl: `curl ${baseUrl}/health`,
+                    javascript: `fetch('${baseUrl}/health').then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.get('${baseUrl}/health').json())`
+                },
+                exampleResponse: {
+                    status: "healthy",
+                    activeSessions: 2,
+                    maxSessions: 3,
+                    sessionDetails: [
+                        {
+                            id: "a1b2c3d4e5f6...",
+                            colabSession: "colab_a1b2c3d4e5f6",
+                            createdAt: "2026-06-17T10:00:00.000Z",
+                            lastActivity: "2026-06-17T10:05:00.000Z",
+                            status: "ready",
+                            hardware: "T4",
+                            hasCurrentExecution: false
+                        }
+                    ],
+                    completedExecutions: 5,
+                    queuedExecutions: 0,
+                    uptime: 3600,
+                    memoryUsage: {
+                        rss: "71.21 MB",
+                        heapTotal: "13.21 MB",
+                        heapUsed: "11.28 MB",
+                        external: "2.5 MB",
+                        arrayBuffers: "1.2 MB"
+                    },
+                    timestamp: "2026-06-17T10:05:00.000Z",
+                    colabBinary: "/usr/local/bin/colab",
+                    usePythonModule: false,
+                    hasAuthToken: true
+                }
+            },
+            healthSimple: {
+                method: "GET",
+                path: "/health/simple",
+                authRequired: false,
+                purpose: "Simple health check - Quick ping to verify server is alive",
+                request: {
+                    format: "No request body required",
+                    headers: "None required"
+                },
+                response: {
+                    format: "JSON",
+                    fields: {
+                        status: "Always 'up' if server is running",
+                        timestamp: "Current server time in ISO format",
+                        sessions: "Number of active sessions"
+                    }
+                },
+                usage: {
+                    curl: `curl ${baseUrl}/health/simple`,
+                    javascript: `fetch('${baseUrl}/health/simple').then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.get('${baseUrl}/health/simple').json())`
+                },
+                exampleResponse: {
+                    status: "up",
+                    timestamp: "2026-06-17T10:05:00.000Z",
+                    sessions: 2
+                }
+            },
+            sessions: {
+                method: "GET",
+                path: "/sessions",
+                authRequired: false,
+                purpose: "List all active sessions with their details and execution history",
+                request: {
+                    format: "No request body required",
+                    headers: "None required"
+                },
+                response: {
+                    format: "JSON",
+                    fields: {
+                        totalSessions: "Total number of active sessions",
+                        maxSessions: "Maximum sessions allowed",
+                        sessions: "Array of session objects",
+                        sessions_sub: "Short identifier (first 8 chars of sessionId)",
+                        sessions_sessionId: "Full 64-character hex session ID",
+                        sessions_colabSession: "Internal Colab session name",
+                        sessions_status: "Session status: 'ready', 'busy', or 'auth_required'",
+                        sessions_hardware: "Hardware type: 'CPU', 'T4', 'A100', etc.",
+                        sessions_variant: "Hardware variant: 'DEFAULT', 'GPU', 'TPU'",
+                        sessions_createdAt: "Session creation timestamp",
+                        sessions_lastActivity: "Last activity timestamp",
+                        sessions_activeMinutes: "Session age in minutes",
+                        sessions_cellsExecuted: "Number of cells executed",
+                        sessions_executions: "Number of executions",
+                        sessions_hasCurrentExecution: "Whether a code execution is running",
+                        sessions_folder: "Session folder path on server",
+                        sessions_dataFileExists: "Whether session data file exists",
+                        memoryUsage: "Current memory usage breakdown",
+                        totalCellsExecuted: "Total cells executed across all sessions",
+                        totalExecutions: "Total executions across all sessions",
+                        queuedExecutions: "Number of queued executions",
+                        completedExecutions: "Number of completed executions in memory",
+                        uptime: "Server uptime in seconds",
+                        timestamp: "Current server time"
+                    }
+                },
+                usage: {
+                    curl: `curl ${baseUrl}/sessions`,
+                    javascript: `fetch('${baseUrl}/sessions').then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.get('${baseUrl}/sessions').json())`
+                },
+                exampleResponse: {
+                    totalSessions: 2,
+                    maxSessions: 3,
+                    sessions: [
+                        {
+                            sub: "a1b2c3d4",
+                            sessionId: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
+                            colabSession: "colab_a1b2c3d4e5f6",
+                            status: "ready",
+                            hardware: "T4",
+                            variant: "GPU",
+                            createdAt: "2026-06-17T10:00:00.000Z",
+                            lastActivity: "2026-06-17T10:05:00.000Z",
+                            activeMinutes: 5.0,
+                            cellsExecuted: 3,
+                            executions: 3,
+                            hasCurrentExecution: false,
+                            folder: "/tmp/colab_sessions/a1b2c3d4...",
+                            dataFileExists: true
+                        }
+                    ],
+                    memoryUsage: {
+                        rss: "71.21 MB",
+                        heapTotal: "13.21 MB",
+                        heapUsed: "11.28 MB",
+                        external: "2.5 MB",
+                        arrayBuffers: "1.2 MB"
+                    },
+                    totalCellsExecuted: 3,
+                    totalExecutions: 3,
+                    queuedExecutions: 0,
+                    completedExecutions: 5,
+                    uptime: 3600,
+                    timestamp: "2026-06-17T10:05:00.000Z"
+                }
+            },
+            sessionDetails: {
+                method: "GET",
+                path: "/sessions/:identifier",
+                authRequired: false,
+                purpose: "Get detailed information about a specific session",
+                request: {
+                    format: "URL parameter",
+                    parameters: {
+                        identifier: "Session ID (full 64-char hex) OR sub (first 8 chars). E.g., /sessions/a1b2c3d4 or /sessions/a1b2c3d4e5f6..."
+                    },
+                    headers: "None required"
+                },
+                response: {
+                    format: "JSON",
+                    fields: {
+                        session: "Session metadata object",
+                        session_sub: "Short identifier (first 8 chars)",
+                        session_sessionId: "Full 64-character hex session ID",
+                        session_colabSession: "Colab session name",
+                        session_status: "Current status ('ready', 'busy', 'auth_required')",
+                        session_hardware: "Hardware type",
+                        session_variant: "Hardware variant",
+                        session_createdAt: "Creation timestamp",
+                        session_lastActivity: "Last activity timestamp",
+                        session_activeMinutes: "Session age in minutes",
+                        session_hasCurrentExecution: "Whether execution is running",
+                        session_folder: "Session folder path",
+                        sessionData: "Detailed execution history with all cells",
+                        sessionData_cells: "Array of executed cells with code, outputs, and status",
+                        sessionData_totalCells: "Total cells count",
+                        sessionData_totalExecutions: "Total executions count",
+                        sessionData_lastUpdated: "Last update timestamp",
+                        currentExecution: "Currently running execution info (or null)",
+                        currentExecution_executionId: "Execution ID",
+                        currentExecution_cellNo: "Cell number being executed",
+                        currentExecution_startedAt: "Start timestamp (milliseconds)",
+                        currentExecution_status: "Execution status ('running')",
+                        currentExecution_partialOutput: "Partial stdout output so far",
+                        currentExecution_partialError: "Partial stderr output so far",
+                        memoryUsage: "Memory usage breakdown",
+                        timestamp: "Current server time"
+                    },
+                    error: {
+                        status: 404,
+                        body: { error: "Session not found", message: "No session found with identifier: ..." }
+                    }
+                },
+                usage: {
+                    curl: `curl ${baseUrl}/sessions/a1b2c3d4`,
+                    javascript: `fetch('${baseUrl}/sessions/a1b2c3d4').then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.get('${baseUrl}/sessions/a1b2c3d4').json())`
+                },
+                exampleResponse: {
+                    session: {
+                        sub: "a1b2c3d4",
+                        sessionId: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
+                        colabSession: "colab_a1b2c3d4e5f6",
+                        status: "ready",
+                        hardware: "T4",
+                        variant: "GPU",
+                        createdAt: "2026-06-17T10:00:00.000Z",
+                        lastActivity: "2026-06-17T10:05:00.000Z",
+                        activeMinutes: "5.00",
+                        hasCurrentExecution: false,
+                        folder: "/tmp/colab_sessions/a1b2c3d4..."
+                    },
+                    sessionData: {
+                        sessionId: "a1b2c3d4...",
+                        createdAt: "2026-06-17T10:00:00.000Z",
+                        cells: [
+                            {
+                                type: "execution",
+                                cellNo: 1,
+                                startedAt: "2026-06-17T10:01:00.000Z",
+                                code: "print('Hello')",
+                                status: "completed",
+                                completedAt: "2026-06-17T10:01:01.000Z",
+                                executionTime: 1234,
+                                output: "Hello\n",
+                                error: ""
+                            }
+                        ],
+                        totalCells: 1,
+                        totalExecutions: 1,
+                        lastUpdated: "2026-06-17T10:01:01.000Z"
+                    },
+                    currentExecution: null,
+                    memoryUsage: {
+                        rss: "71.21 MB",
+                        heapTotal: "13.21 MB",
+                        heapUsed: "11.28 MB",
+                        external: "2.5 MB",
+                        arrayBuffers: "1.2 MB"
+                    },
+                    timestamp: "2026-06-17T10:05:00.000Z"
+                }
+            },
+            help: {
+                method: "GET",
+                path: "/help",
+                authRequired: false,
+                purpose: "Returns this complete API documentation for AI agents and developers",
+                request: {
+                    format: "No request body required",
+                    headers: "None required"
+                },
+                response: {
+                    format: "JSON",
+                    description: "This entire documentation structure"
+                },
+                usage: {
+                    curl: `curl ${baseUrl}/help`,
+                    javascript: `fetch('${baseUrl}/help').then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.get('${baseUrl}/help').json())`
+                }
+            },
+            // ============================================
+            // SESSION MANAGEMENT (Auth Required)
+            // ============================================
+            createSession: {
+                method: "POST",
+                path: "/session/new",
+                authRequired: true,
+                purpose: "Create a new Colab session with flexible hardware selection (GPU/TPU/CPU)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        session_name: "Optional custom session name (auto-generated if omitted)",
+                        gpu: "GPU type: T4, L4, G4, H100, A100 (optional)",
+                        tpu: "TPU type: v5e1, v6e1 (optional)",
+                        timeout: "Custom session timeout in milliseconds (optional)"
+                    },
+                    examples: {
+                        cpu: {
+                            api_secret: "your-api-key",
+                            session_name: "cpu-session"
+                        },
+                        gpu: {
+                            api_secret: "your-api-key",
+                            session_name: "gpu-training",
+                            gpu: "A100"
+                        },
+                        tpu: {
+                            api_secret: "your-api-key",
+                            session_name: "tpu-inference",
+                            tpu: "v5e1"
+                        }
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        sessionId: "64-character hex session ID",
+                        hardware: "Hardware type (CPU, T4, A100, etc.)",
+                        variant: "Hardware variant (DEFAULT, GPU, TPU)",
+                        authUrl: "null (no auth needed)",
+                        expiresIn: "Session timeout in milliseconds",
+                        activeSessions: "Current session count",
+                        maxSessions: "Maximum allowed sessions",
+                        message: "Session created with hardware"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    rateLimit: {
+                        status: 429,
+                        body: { error: "Max sessions reached" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/session/new -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","gpu":"T4"}'`,
+                    javascript: `fetch('${baseUrl}/session/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', gpu: 'T4' }) }).then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.post('${baseUrl}/session/new', json={'api_secret':'your-api-key','gpu':'T4'}).json())`
+                },
+                exampleResponse: {
+                    success: true,
+                    sessionId: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
+                    hardware: "T4",
+                    variant: "GPU",
+                    authUrl: null,
+                    expiresIn: 10800000,
+                    activeSessions: 2,
+                    maxSessions: 3,
+                    message: "Session created with T4"
+                }
+            },
+            deleteSession: {
+                method: "DELETE",
+                path: "/session/:sessionId",
+                authRequired: true,
+                purpose: "Terminate a session and release the Colab VM",
+                request: {
+                    format: "URL parameter + headers",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    },
+                    parameters: {
+                        sessionId: "Session ID to delete (in URL path)"
+                    },
+                    example: `DELETE ${baseUrl}/session/a1b2c3d4e5f6...`
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Session terminated"
+                    },
+                    warning: {
+                        success: true,
+                        warning: "Session removed from tracking, but may still exist remotely"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X DELETE ${baseUrl}/session/a1b2c3d4e5f6... -H "api-secret: your-api-key"`,
+                    javascript: `fetch('${baseUrl}/session/a1b2c3d4e5f6...', { method: 'DELETE', headers: { 'api-secret': 'your-api-key' } }).then(r => r.json()).then(console.log);`,
+                    python: `import requests; print(requests.delete('${baseUrl}/session/a1b2c3d4e5f6...', headers={'api-secret':'your-api-key'}).json())`
+                }
+            },
+            keepAlive: {
+                method: "POST",
+                path: "/keepalive",
+                authRequired: true,
+                purpose: "Keep a session alive to prevent idle timeout (default 3 hours)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID to keep alive (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6..."
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Session kept alive"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/keepalive -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4..."}'`,
+                    javascript: `fetch('${baseUrl}/keepalive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...' }) }).then(r => r.json()).then(console.log);`
+                },
+                recommendedInterval: "Call every 30-60 minutes to prevent session expiration",
+                exampleResponse: {
+                    success: true,
+                    message: "Session kept alive"
+                }
+            },
+            restartKernel: {
+                method: "POST",
+                path: "/session/restart-kernel",
+                authRequired: true,
+                purpose: "Restart the Jupyter kernel of a running session (keeps VM alive)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6..."
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Kernel restarted successfully"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/session/restart-kernel -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4..."}'`,
+                    javascript: `fetch('${baseUrl}/session/restart-kernel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...' }) }).then(r => r.json()).then(console.log);`
+                }
+            },
+            sessionStatus: {
+                method: "POST",
+                path: "/session/status",
+                authRequired: true,
+                purpose: "Get detailed status of a session including current execution info",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6..."
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    fields: {
+                        success: "Always true if successful",
+                        sessionId: "Session ID",
+                        status: "Session status: 'BUSY' or 'IDLE'",
+                        running: "What's currently running (or null)",
+                        hardware: "Hardware type",
+                        variant: "Hardware variant",
+                        lastExecution: "Last execution info (or null)",
+                        lastExecution_file: "Executed file name",
+                        lastExecution_cell: "Cell number or identifier",
+                        lastExecution_time: "Execution timestamp",
+                        rawOutput: "Raw CLI output from status command"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/session/status -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4..."}'`,
+                    javascript: `fetch('${baseUrl}/session/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...' }) }).then(r => r.json()).then(console.log);`
+                }
+            },
+            // ============================================
+            // CODE EXECUTION (Auth Required)
+            // ============================================
+            executeCode: {
+                method: "POST",
+                path: "/exec",
+                authRequired: true,
+                purpose: "Execute Python code on a Colab session with async polling support",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID to execute on (required)",
+                        code: "Python code to execute (required)",
+                        cellNo: "Cell number for tracking (required, integer)",
+                        timeout: "Custom timeout in seconds (optional, defaults to EXECUTION_TIMEOUT)"
+                    },
+                    limits: {
+                        maxCodeSize: "3 MB (configurable via MAX_CODE_SIZE)",
+                        maxExecutionTime: "2 hours (configurable via EXECUTION_TIMEOUT)",
+                        maxCodeLength: "100,000 characters (configurable via MAX_CODE_LENGTH)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        code: "print('Hello World')",
+                        cellNo: 1,
+                        timeout: 3600
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    processing: {
+                        status: "processing",
+                        sessionId: "Session ID",
+                        executionId: "Execution ID for polling",
+                        pollInterval: "Polling interval in milliseconds (configurable via POLL_INTERVAL)",
+                        message: "Code execution started. Poll /status for results."
+                    },
+                    busy: {
+                        status: 409,
+                        body: {
+                            error: "Session busy",
+                            currentExecution: {
+                                executionId: "Current execution ID",
+                                cellNo: "Current cell number",
+                                startedAt: "Start timestamp",
+                                status: "running",
+                                partialOutput: "Partial output so far",
+                                partialError: "Partial error output"
+                            }
+                        }
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/exec -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","code":"print(\\"Hello World\\")","cellNo":1}'`,
+                    javascript: `fetch('${baseUrl}/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...', code: 'print("Hello World")', cellNo: 1 }) }).then(r => r.json()).then(console.log);`
+                },
+                exampleResponse: {
+                    status: "processing",
+                    sessionId: "a1b2c3d4e5f6...",
+                    executionId: "f1e2d3c4b5a6",
+                    pollInterval: 10000,
+                    message: "Code execution started. Poll /status for results."
+                }
+            },
+            executeFile: {
+                method: "POST",
+                path: "/exec/file",
+                authRequired: true,
+                purpose: "Execute a Python file on a Colab session",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        fileContent: "Base64 encoded file content (required)",
+                        fileName: "Name of the file (required)",
+                        timeout: "Custom timeout in seconds (optional)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        fileContent: "cHJpbnQoJ0hlbGxvIFdvcmxkJyk=",
+                        fileName: "script.py",
+                        timeout: 3600
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        executionId: "Execution ID",
+                        stdout: "Standard output from execution",
+                        stderr: "Standard error from execution",
+                        exitCode: "Exit code (0 for success)"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/exec/file -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","fileContent":"cHJpbnQoJ0hlbGxvJyk=","fileName":"script.py"}'`,
+                    javascript: `fetch('${baseUrl}/exec/file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...', fileContent: btoa('print("Hello")'), fileName: 'script.py' }) }).then(r => r.json()).then(console.log);`
+                }
+            },
+            executeNotebook: {
+                method: "POST",
+                path: "/exec/notebook",
+                authRequired: true,
+                purpose: "Execute a Jupyter notebook (.ipynb) on a Colab session",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        notebookContent: "Base64 encoded notebook content (required)",
+                        timeout: "Custom timeout in seconds (optional)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        notebookContent: "base64_encoded_notebook_content",
+                        timeout: 3600
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        executionId: "Execution ID",
+                        outputNotebook: "Base64 encoded output notebook (or null)",
+                        cellResults: "Array of per-cell results",
+                        cellResults_cellNo: "Cell number",
+                        cellResults_output: "Cell output",
+                        cellResults_error: "Cell error (or null)",
+                        stdout: "Standard output",
+                        stderr: "Standard error"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/exec/notebook -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","notebookContent":"base64..."}'`,
+                    javascript: `fetch('${baseUrl}/exec/notebook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...', notebookContent: btoa(notebookJson) }) }).then(r => r.json()).then(console.log);`
+                }
+            },
+            executionStatus: {
+                method: "POST",
+                path: "/status",
+                authRequired: true,
+                purpose: "Check the status of a running execution (polling)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        executionId: "Execution ID from /exec response (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        executionId: "f1e2d3c4b5a6"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    running: {
+                        status: "running",
+                        elapsed: "Time elapsed in milliseconds",
+                        partialOutput: "Partial stdout output",
+                        partialError: "Partial stderr output"
+                    },
+                    completed: {
+                        status: "completed",
+                        output: "Full stdout output",
+                        error: "Full stderr output or empty",
+                        executionTime: "Total execution time in milliseconds"
+                    },
+                    failed: {
+                        status: "failed",
+                        output: "Partial stdout output",
+                        error: "Error message",
+                        executionTime: "Total execution time in milliseconds"
+                    },
+                    notFound: {
+                        status: "not_found",
+                        message: "Execution not found or already completed"
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/status -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","executionId":"f1e2d3c4b5a6"}'`,
+                    javascript: `fetch('${baseUrl}/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', sessionId: 'a1b2c3d4...', executionId: 'f1e2d3c4b5a6' }) }).then(r => r.json()).then(console.log);`
+                },
+                polling: {
+                    description: "Poll this endpoint every 10-15 seconds (or use the pollInterval from /exec response) until status is 'completed' or 'failed'",
+                    example: "while (status.status === 'running') { await sleep(pollInterval); status = await fetchStatus(); }"
+                }
+            },
+            acknowledgeExecution: {
+                method: "POST",
+                path: "/status/ack",
+                authRequired: true,
+                purpose: "Acknowledge execution completion to free memory on server",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        executionId: "Execution ID to acknowledge (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        executionId: "f1e2d3c4b5a6"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Acknowledged"
+                    },
+                    notFound: {
+                        success: false,
+                        message: "Execution not found"
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/status/ack -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","executionId":"f1e2d3c4b5a6"}'`,
+                    javascript: `fetch('${baseUrl}/status/ack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_secret: 'your-api-key', executionId: 'f1e2d3c4b5a6' }) }).then(r => r.json()).then(console.log);`
+                },
+                note: "Always call this after receiving a 'completed' or 'failed' status to clean up memory"
+            },
+            repl: {
+                method: "POST",
+                path: "/repl",
+                authRequired: true,
+                purpose: "Execute Python code in REPL mode (one-shot execution)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        code: "Python code to execute (required)",
+                        outputImagePath: "Optional path to save generated images"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        code: "import matplotlib.pyplot as plt\nplt.plot([1,2,3])\nplt.show()"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        output: "Standard output",
+                        error: "Standard error",
+                        executionTime: "Execution time in milliseconds"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/repl -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","code":"print(\\"Hello\\")"}'`
+                }
+            },
+            console: {
+                method: "POST",
+                path: "/console",
+                authRequired: true,
+                purpose: "Execute shell commands on the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        command: "Shell command to execute (required)",
+                        isPiped: "Whether to pipe input (default: true)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        command: "ls -la /content"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        output: "Command output",
+                        error: "Command error"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/console -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","command":"df -h"}'`
+                }
+            },
+            ephemeralRun: {
+                method: "POST",
+                path: "/run",
+                authRequired: true,
+                purpose: "Provision a fresh VM, execute a script, and auto-cleanup (one-shot)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        scriptContent: "Base64 encoded script content (required)",
+                        scriptArgs: "Array of arguments to pass to script (optional)",
+                        gpu: "GPU type (optional)",
+                        tpu: "TPU type (optional)",
+                        keepAlive: "Keep VM alive after execution (default: false)",
+                        sessionName: "Name for the session (optional)",
+                        timeout: "Custom timeout in seconds (optional)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        scriptContent: "cHJpbnQoJ1Rlc3QnKQ==",
+                        scriptArgs: ["--epochs", "10"],
+                        gpu: "T4",
+                        keepAlive: false
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        stdout: "Script output",
+                        stderr: "Script error",
+                        exitCode: "Exit code (0 for success)",
+                        sessionId: "Session ID (if keepAlive=true)",
+                        keptAlive: "Whether session was kept alive",
+                        message: "Status message"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/run -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","scriptContent":"cHJpbnQoJ0hlbGxvJyk=","gpu":"T4"}'`
+                }
+            },
+            // ============================================
+            // FILE OPERATIONS (Auth Required)
+            // ============================================
+            listFiles: {
+                method: "POST",
+                path: "/file/ls",
+                authRequired: true,
+                purpose: "List files and directories on the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        path: "Directory path to list (default: /content)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        path: "/content/data"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        path: "Listed path",
+                        files: "Array of file objects",
+                        files_name: "File/directory name",
+                        files_type: "File type: 'file' or 'directory'",
+                        rawOutput: "Raw CLI output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/file/ls -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","path":"/content"}'`
+                }
+            },
+            deleteFile: {
+                method: "POST",
+                path: "/file/rm",
+                authRequired: true,
+                purpose: "Delete a file on the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        path: "File path to delete (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        path: "/content/temp.txt"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Deleted path"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/file/rm -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","path":"/content/temp.txt"}'`
+                }
+            },
+            uploadFile: {
+                method: "POST",
+                path: "/file/upload",
+                authRequired: true,
+                purpose: "Upload a file to the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        remotePath: "Remote file path (required)",
+                        fileContent: "Base64 encoded file content (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        remotePath: "/content/data.csv",
+                        fileContent: "base64_encoded_content"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        remotePath: "Uploaded path",
+                        size: "File size in bytes",
+                        message: "Upload status"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/file/upload -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","remotePath":"/content/data.csv","fileContent":"base64..."}'`
+                }
+            },
+            downloadFile: {
+                method: "POST",
+                path: "/file/download",
+                authRequired: true,
+                purpose: "Download a file from the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        remotePath: "Remote file path (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        remotePath: "/content/results.csv"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        fileContent: "Base64 encoded file content",
+                        fileName: "File name",
+                        fileSize: "File size in bytes"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/file/download -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","remotePath":"/content/results.csv"}'`
+                }
+            },
+            editFile: {
+                method: "POST",
+                path: "/file/edit",
+                authRequired: true,
+                purpose: "Edit a file on the Colab VM (in-place update)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        remotePath: "Remote file path (required)",
+                        newContent: "Base64 encoded new content (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        remotePath: "/content/config.json",
+                        newContent: "base64_encoded_new_content"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Updated remotePath",
+                        size: "New file size in bytes"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/file/edit -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","remotePath":"/content/config.json","newContent":"base64..."}'`
+                }
+            },
+            // ============================================
+            // AUTOMATION (Auth Required)
+            // ============================================
+            vmAuth: {
+                method: "POST",
+                path: "/automation/auth",
+                authRequired: true,
+                purpose: "Authenticate the Colab VM for Google Cloud services (GCS, BigQuery, etc.)",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6..."
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Authentication completed"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/automation/auth -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4..."}'`
+                }
+            },
+            mountDrive: {
+                method: "POST",
+                path: "/automation/drivemount",
+                authRequired: true,
+                purpose: "Mount Google Drive on the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        mountPath: "Mount path (default: /content/drive)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        mountPath: "/content/drive"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        message: "Drive mounted at mountPath"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/automation/drivemount -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4..."}'`
+                }
+            },
+            installPackages: {
+                method: "POST",
+                path: "/automation/install",
+                authRequired: true,
+                purpose: "Install Python packages on the Colab VM",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: {
+                        api_secret: "Your API secret (required)",
+                        sessionId: "Session ID (required)",
+                        packages: "Array of package names (optional)",
+                        requirementsFile: "Base64 encoded requirements.txt content (optional)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        packages: ["numpy", "pandas", "torch"]
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        installed: "Array of installed packages",
+                        output: "Installation output",
+                        message: "Installation complete"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/automation/install -H "Content-Type: application/json" -d '{"api_secret":"your-api-key","sessionId":"a1b2c3d4...","packages":["numpy","pandas"]}'`
+                }
+            },
+            // ============================================
+            // UTILITIES (Auth Required)
+            // ============================================
+            getUrl: {
+                method: "GET",
+                path: "/url/:sessionId",
+                authRequired: true,
+                purpose: "Generate a browser URL to connect to the session",
+                request: {
+                    format: "URL parameter + query",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    },
+                    parameters: {
+                        sessionId: "Session ID (in URL path)"
+                    },
+                    query: {
+                        host: "Colab host (default: https://colab.research.google.com)"
+                    },
+                    example: `GET ${baseUrl}/url/a1b2c3d4?host=https://colab.research.google.com`
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        url: "Full browser URL",
+                        sessionId: "Session ID",
+                        host: "Host used"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET "${baseUrl}/url/a1b2c3d4" -H "api-secret: your-api-key"`,
+                    javascript: `fetch('${baseUrl}/url/a1b2c3d4', { headers: { 'api-secret': 'your-api-key' } }).then(r => r.json()).then(console.log);`
+                }
+            },
+            getVersion: {
+                method: "GET",
+                path: "/version",
+                authRequired: true,
+                purpose: "Get the Colab CLI version",
+                request: {
+                    format: "No request body",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        version: "CLI version string"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET ${baseUrl}/version -H "api-secret: your-api-key"`
+                }
+            },
+            checkUpdate: {
+                method: "GET",
+                path: "/update",
+                authRequired: true,
+                purpose: "Check for updates to the Colab CLI",
+                request: {
+                    format: "No request body",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        output: "Update check output",
+                        stderr: "Error output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET ${baseUrl}/update -H "api-secret: your-api-key"`
+                }
+            },
+            whoami: {
+                method: "GET",
+                path: "/whoami",
+                authRequired: true,
+                purpose: "Debug endpoint - get current authentication identity and scopes",
+                request: {
+                    format: "No request body",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        output: "Whoami output",
+                        stderr: "Error output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET ${baseUrl}/whoami -H "api-secret: your-api-key"`
+                }
+            },
+            // ============================================
+            // HISTORY ENDPOINTS (Auth Required)
+            // ============================================
+            getHistory: {
+                method: "GET",
+                path: "/log/:sessionId",
+                authRequired: true,
+                purpose: "Get the execution history for a session",
+                request: {
+                    format: "URL parameter + query",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    },
+                    parameters: {
+                        sessionId: "Session ID (in URL path)"
+                    },
+                    query: {
+                        lines: "Number of lines to show (optional)",
+                        type: "Filter by event type: execution, file_operation, automation, etc. (optional)",
+                        format: "Output format: jsonl, ipynb, md, txt (default: jsonl)"
+                    },
+                    example: `GET ${baseUrl}/log/a1b2c3d4?lines=20&type=execution`
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        sessionId: "Session ID",
+                        history: "History data (format varies)",
+                        format: "Output format",
+                        rawOutput: "Raw CLI output",
+                        stderr: "Error output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET "${baseUrl}/log/a1b2c3d4?lines=20" -H "api-secret: your-api-key"`
+                }
+            },
+            exportHistory: {
+                method: "POST",
+                path: "/log/export",
+                authRequired: true,
+                purpose: "Export session history to various formats",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "api-secret": "Your API secret (required)"
+                    },
+                    body: {
+                        sessionId: "Session ID (required)",
+                        format: "Export format: ipynb, md, txt, jsonl (required)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        format: "ipynb"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        content: "Base64 encoded file content",
+                        format: "Export format",
+                        fileName: "Download filename",
+                        sessionId: "Session ID",
+                        rawOutput: "Raw CLI output",
+                        stderr: "Error output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/log/export -H "Content-Type: application/json" -H "api-secret: your-api-key" -d '{"sessionId":"a1b2c3d4...","format":"ipynb"}'`
+                }
+            },
+            filterHistory: {
+                method: "GET",
+                path: "/log/:sessionId/filter",
+                authRequired: true,
+                purpose: "Filter session history by event type",
+                request: {
+                    format: "URL parameter + query",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    },
+                    parameters: {
+                        sessionId: "Session ID (in URL path)"
+                    },
+                    query: {
+                        eventType: "Event type to filter (required): execution, file_operation, automation, keep_alive_started, keep_alive_error, keep_alive_stopped, session_created, session_terminated",
+                        limit: "Number of results (default: 50)",
+                        offset: "Offset for pagination (default: 0)"
+                    },
+                    example: `GET ${baseUrl}/log/a1b2c3d4/filter?eventType=execution&limit=10`
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        sessionId: "Session ID",
+                        eventType: "Filtered event type",
+                        totalEvents: "Total events matching filter",
+                        events: "Array of matching events",
+                        limit: "Limit used",
+                        offset: "Offset used"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET "${baseUrl}/log/a1b2c3d4/filter?eventType=execution" -H "api-secret: your-api-key"`
+                }
+            },
+            searchHistory: {
+                method: "POST",
+                path: "/log/search",
+                authRequired: true,
+                purpose: "Search session history for specific content",
+                request: {
+                    format: "JSON",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "api-secret": "Your API secret (required)"
+                    },
+                    body: {
+                        sessionId: "Session ID (required)",
+                        query: "Search query (required)",
+                        limit: "Max results (default: 20)",
+                        searchIn: "Search target: code, output, all (default: code)"
+                    },
+                    example: {
+                        api_secret: "your-api-key",
+                        sessionId: "a1b2c3d4e5f6...",
+                        query: "import torch",
+                        searchIn: "code"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        sessionId: "Session ID",
+                        query: "Search query",
+                        searchIn: "Search target",
+                        totalFound: "Number of matches",
+                        results: "Array of matching events",
+                        limit: "Limit used"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X POST ${baseUrl}/log/search -H "Content-Type: application/json" -H "api-secret: your-api-key" -d '{"sessionId":"a1b2c3d4...","query":"import torch"}'`
+                }
+            },
+            executionDetails: {
+                method: "GET",
+                path: "/log/:sessionId/execution/:executionId",
+                authRequired: true,
+                purpose: "Get details of a specific execution by its ID",
+                request: {
+                    format: "URL parameter",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    },
+                    parameters: {
+                        sessionId: "Session ID (in URL path)",
+                        executionId: "Execution ID (in URL path)"
+                    },
+                    example: `GET ${baseUrl}/log/a1b2c3d4/execution/f1e2d3c4b5a6`
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        sessionId: "Session ID",
+                        executionId: "Execution ID",
+                        execution: "Complete execution event",
+                        rawOutput: "Raw CLI output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    },
+                    notFound: {
+                        status: 404,
+                        body: { error: "Session not found or execution not found" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET "${baseUrl}/log/a1b2c3d4/execution/f1e2d3c4b5a6" -H "api-secret: your-api-key"`
+                }
+            },
+            listHistorySessions: {
+                method: "GET",
+                path: "/log/sessions/list",
+                authRequired: true,
+                purpose: "List all sessions that have history logs",
+                request: {
+                    format: "No request body",
+                    headers: {
+                        "api-secret": "Your API secret (required)"
+                    }
+                },
+                response: {
+                    format: "JSON",
+                    success: {
+                        success: true,
+                        sessionsWithHistory: "Array of session names with history",
+                        rawOutput: "Raw CLI output"
+                    },
+                    error: {
+                        status: 401,
+                        body: { error: "Invalid API secret" }
+                    }
+                },
+                usage: {
+                    curl: `curl -X GET ${baseUrl}/log/sessions/list -H "api-secret: your-api-key"`
+                }
+            }
+        },
+        workflow: {
+            title: "Typical API Workflow",
+            steps: [
+                {
+                    step: 1,
+                    action: "Create a session",
+                    endpoint: "POST /session/new",
+                    description: "Allocate a Colab VM with optional GPU/TPU",
+                    next: "Get sessionId from response"
+                },
+                {
+                    step: 2,
+                    action: "Keep session alive (optional but recommended)",
+                    endpoint: "POST /keepalive",
+                    description: "Prevent idle timeout (call every 30-60 minutes)",
+                    next: "Continue until ready to execute"
+                },
+                {
+                    step: 3,
+                    action: "Execute code",
+                    endpoint: "POST /exec",
+                    description: "Run Python code on the session",
+                    next: "Get executionId from response"
+                },
+                {
+                    step: 4,
+                    action: "Poll for status",
+                    endpoint: "POST /status",
+                    description: "Check execution progress (every 10-15 seconds)",
+                    next: "Wait for 'completed' or 'failed' status"
+                },
+                {
+                    step: 5,
+                    action: "Acknowledge completion",
+                    endpoint: "POST /status/ack",
+                    description: "Free memory on server",
+                    next: "Continue or delete session"
+                },
+                {
+                    step: 6,
+                    action: "Delete session",
+                    endpoint: "DELETE /session/:sessionId",
+                    description: "Terminate VM and free resources",
+                    next: "Done"
+                }
+            ],
+            alternativeWorkflows: [
+                {
+                    title: "One-shot execution (Ephemeral)",
+                    description: "Provision, execute, and cleanup in one call",
+                    endpoint: "POST /run",
+                    useCase: "Training jobs, data processing, CI/CD"
+                },
+                {
+                    title: "File operations",
+                    description: "Upload, download, list, and edit files on the VM",
+                    endpoints: ["POST /file/upload", "POST /file/download", "POST /file/ls", "POST /file/rm", "POST /file/edit"],
+                    useCase: "Data transfer, model checkpoint management"
+                },
+                {
+                    title: "Automation",
+                    description: "Authenticate VM, mount Drive, install packages",
+                    endpoints: ["POST /automation/auth", "POST /automation/drivemount", "POST /automation/install"],
+                    useCase: "Environment setup, GCP integration"
+                },
+                {
+                    title: "History & Logging",
+                    description: "View, filter, search, and export session history",
+                    endpoints: ["GET /log/:sessionId", "POST /log/export", "GET /log/:sessionId/filter", "POST /log/search", "GET /log/:sessionId/execution/:executionId", "GET /log/sessions/list"],
+                    useCase: "Debugging, auditing, reproducibility"
+                }
+            ]
+        },
+        errors: {
+            commonErrors: [
+                {
+                    code: 401,
+                    description: "Invalid API secret",
+                    solution: "Check that you're sending the correct API secret in the request body or headers"
+                },
+                {
+                    code: 404,
+                    description: "Session not found",
+                    solution: "The session ID may be expired or invalid. Create a new session with POST /session/new"
+                },
+                {
+                    code: 409,
+                    description: "Session busy",
+                    solution: "Wait for the current execution to complete, or use a different session"
+                },
+                {
+                    code: 400,
+                    description: "Missing required fields",
+                    solution: "Check that all required fields are included in the request body"
+                },
+                {
+                    code: 500,
+                    description: "Internal server error",
+                    solution: "Check server logs for details. The Colab CLI may have failed."
+                },
+                {
+                    code: 429,
+                    description: "Rate limit exceeded",
+                    solution: "Slow down your requests (rate limiting may be disabled via RATE_LIMIT_ENABLED=false)"
+                },
+                {
+                    code: 413,
+                    description: "Request too large",
+                    solution: "Reduce code size (max 3MB configurable via MAX_CODE_SIZE)"
+                }
+            ]
+        },
+        limits: {
+            maxSessions: `${MAX_SESSIONS}`,
+            sessionTimeout: `${SESSION_TIMEOUT / 1000 / 60 / 60} hours`,
+            executionTimeout: `${EXECUTION_TIMEOUT / 60} minutes`,
+            maxCodeSize: `${MAX_CODE_SIZE / 1024 / 1024} MB`,
+            maxCodeLength: `${MAX_CODE_LENGTH} characters`,
+            pollingInterval: `${POLL_INTERVAL / 1000} seconds`,
+            concurrentExecutions: "3 (configurable via MAX_CONCURRENT_EXECUTIONS)",
+            historyEvents: "1000 (configurable via HISTORY_MAX_EVENTS)"
+        },
+        architecture: {
+            codeExecution: "Uses spawn() for safe stdin piping (no shell escaping issues)",
+            sessionManagement: "In-memory Map with periodic cleanup",
+            persistence: "Session data stored in JSON files at SESSIONS_BASE_DIR",
+            polling: "Async execution with status polling via /status endpoint",
+            logging: "Structured logging with configurable log levels",
+            cleanup: "Automatic cleanup of idle sessions, hanging processes, and completed executions"
+        },
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ============================================
 // AUTH PROTECTED ENDPOINTS
 // ============================================
 
