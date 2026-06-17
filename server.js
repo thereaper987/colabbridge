@@ -135,21 +135,17 @@ async function initColabBinary() {
 async function runColabCli(args, timeout = 30000) {
     return new Promise((resolve, reject) => {
         let command;
-        // Build command WITHOUT extra quotes - just join with spaces
-        const formattedArgs = args.join(' ');
-        
         if (USE_PYTHON_MODULE) {
-            command = `${COLAB_BINARY} -m colab_cli ${formattedArgs}`;
+            const escapedArgs = args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ');
+            command = `${COLAB_BINARY} -m colab_cli ${escapedArgs}`;
         } else {
-            command = `${COLAB_BINARY} ${formattedArgs}`;
+            const escapedArgs = args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ');
+            command = `${COLAB_BINARY} ${escapedArgs}`;
         }
-        
         console.log(`Running: ${command}`);
         exec(command, { timeout, shell: '/bin/bash', maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error && error.code !== 0) {
                 console.error(`Command failed: ${error.message}`);
-                console.error(`Stdout: ${stdout}`);
-                console.error(`Stderr: ${stderr}`);
                 reject({ error, stdout, stderr });
             } else {
                 resolve({ stdout, stderr });
@@ -157,7 +153,6 @@ async function runColabCli(args, timeout = 30000) {
         });
     });
 }
-
 // ============================================
 // AUTH SETUP
 // ============================================
