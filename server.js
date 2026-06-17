@@ -55,6 +55,28 @@ const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL) || 15000;
 const SESSIONS_BASE_DIR = process.env.SESSIONS_BASE_DIR || path.join(os.tmpdir(), 'colab_sessions');
 const HANGING_PROCESS_CLEANUP_INTERVAL = parseInt(process.env.HANGING_PROCESS_CLEANUP_INTERVAL) || 300000;
 const DEFAULT_GPU = process.env.DEFAULT_GPU || 'T4';
+const ENABLE_GPU_FLEXIBILITY = process.env.ENABLE_GPU_FLEXIBILITY === 'true';
+const ENABLE_FILE_OPS = process.env.ENABLE_FILE_OPS === 'true';
+const ENABLE_AUTOMATION = process.env.ENABLE_AUTOMATION === 'true';
+const ENABLE_EPHEMERAL_RUN = process.env.ENABLE_EPHEMERAL_RUN === 'true';
+const ENABLE_HISTORY_EXPORT = process.env.ENABLE_HISTORY_EXPORT === 'true';
+const ENABLE_SESSION_PERSISTENCE = process.env.ENABLE_SESSION_PERSISTENCE === 'true';
+const HISTORY_MAX_EVENTS = parseInt(process.env.HISTORY_MAX_EVENTS) || 1000;
+const HISTORY_EXPORT_FORMATS = process.env.HISTORY_EXPORT_FORMATS ? process.env.HISTORY_EXPORT_FORMATS.split(',') : ['ipynb', 'md', 'txt', 'jsonl'];
+const HISTORY_AUTO_CLEANUP = process.env.HISTORY_AUTO_CLEANUP === 'true';
+const RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_ENABLED === 'true';
+const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW) || 60000;
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000;
+const API_SECRET_ROTATION_INTERVAL = parseInt(process.env.API_SECRET_ROTATION_INTERVAL) || 2592000000;
+const ENABLE_CORS = process.env.ENABLE_CORS === 'true';
+const MAX_CONCURRENT_EXECUTIONS = parseInt(process.env.MAX_CONCURRENT_EXECUTIONS) || 3;
+const EXECUTION_QUEUE_TIMEOUT = parseInt(process.env.EXECUTION_QUEUE_TIMEOUT) || 300000;
+const CLEANUP_BATCH_SIZE = parseInt(process.env.CLEANUP_BATCH_SIZE) || 10;
+const LOG_MAX_SIZE = parseInt(process.env.LOG_MAX_SIZE) || 10485760;
+const LOG_MAX_FILES = parseInt(process.env.LOG_MAX_FILES) || 5;
+const ENABLE_REQUEST_LOGGING = process.env.ENABLE_REQUEST_LOGGING === 'true';
+const ENABLE_ERROR_LOGGING = process.env.ENABLE_ERROR_LOGGING === 'true';
+const CLEANUP_INTERVAL = parseInt(process.env.CLEANUP_INTERVAL) || 3600000;
 
 // Colab binary configuration
 let COLAB_BINARY = 'colab';
