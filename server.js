@@ -15,6 +15,7 @@ const execPromise = util.promisify(exec);
 // CORS CONFIGURATION
 // ============================================
 const allowedOrigins = [
+    'https://thereaper987.github.io',
     'https://kushalkumarj2006.github.io',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
