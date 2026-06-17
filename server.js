@@ -132,26 +132,11 @@ async function initColabBinary() {
 // COLAB CLI RUNNER (Enhanced - Fixed)
 // ============================================
 
-async function runColabCli(args, options = {}) {
-    const { 
-        sessionId = null,
-        timeout = 30000, 
-        env = {},
-        cwd = null,
-        maxBuffer = 50 * 1024 * 1024
-    } = options;
-
+async function runColabCli(args, timeout = 30000) {
     return new Promise((resolve, reject) => {
         let command;
-        
-        // Build command properly - handle args with spaces by quoting only those
-        const formattedArgs = args.map(arg => {
-            // If arg contains spaces or special characters, quote it
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('\\')) {
-                return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-        }).join(' ');
+        // Build command WITHOUT extra quotes - just join with spaces
+        const formattedArgs = args.join(' ');
         
         if (USE_PYTHON_MODULE) {
             command = `${COLAB_BINARY} -m colab_cli ${formattedArgs}`;
@@ -160,23 +145,7 @@ async function runColabCli(args, options = {}) {
         }
         
         console.log(`Running: ${command}`);
-        
-        const envVars = { ...process.env, ...env };
-        if (sessionId) {
-            const sessionFolder = path.join(SESSIONS_BASE_DIR, sessionId);
-            envVars.COLAB_CONFIG_DIR = path.join(sessionFolder, '.config');
-        }
-        
-        const execOptions = {
-            timeout: timeout,
-            shell: '/bin/bash',
-            maxBuffer: maxBuffer,
-            env: envVars
-        };
-        
-        if (cwd) execOptions.cwd = cwd;
-        
-        exec(command, execOptions, (error, stdout, stderr) => {
+        exec(command, { timeout, shell: '/bin/bash', maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error && error.code !== 0) {
                 console.error(`Command failed: ${error.message}`);
                 console.error(`Stdout: ${stdout}`);
