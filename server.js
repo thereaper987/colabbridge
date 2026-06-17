@@ -2685,7 +2685,7 @@ app.get('/help', (req, res) => {
 // AUTH PROTECTED ENDPOINTS
 // ============================================
 
-// 1. Create new session (flexible)
+// 1. Create new session (flexible) - WITH AUTO CLEANUP
 app.post('/session/new', async (req, res) => {
     const apiSecret = extractApiSecret(req);
     if (!validateApiSecret(apiSecret)) {
@@ -2696,87 +2696,169 @@ app.post('/session/new', async (req, res) => {
     const { session_name, gpu, tpu, timeout } = req.body;
     const name = resolveSessionName(session_name);
     
-    try {
-        const { variant, accelerator } = resolveHardware(gpu, tpu);
-        
-        // Check session limit
-        if (sessions.size >= MAX_SESSIONS) {
-            console.log(`🧹 ${sessions.size} sessions active, max ${MAX_SESSIONS}`);
-            let oldestSessionId = null;
-            let oldestTime = Infinity;
+    // Max retry attempts for session creation
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    
+    while (retryCount < MAX_RETRIES) {
+        try {
+            const { variant, accelerator } = resolveHardware(gpu, tpu);
             
-            for (const [sessionId, session] of sessions.entries()) {
-                if (session.lastActivity < oldestTime) {
-                    oldestTime = session.lastActivity;
-                    oldestSessionId = sessionId;
+            // Check session limit - if we're at max, kill the oldest
+            if (sessions.size >= MAX_SESSIONS) {
+                console.log(`🧹 ${sessions.size} sessions active, max ${MAX_SESSIONS}`);
+                let oldestSessionId = null;
+                let oldestTime = Infinity;
+                
+                for (const [sessionId, session] of sessions.entries()) {
+                    if (session.lastActivity < oldestTime) {
+                        oldestTime = session.lastActivity;
+                        oldestSessionId = sessionId;
+                    }
+                }
+                
+                if (oldestSessionId) {
+                    console.log(`🗑️ Killing oldest session: ${oldestSessionId}`);
+                    const session = sessions.get(oldestSessionId);
+                    try {
+                        await runColabCli(['stop', '-s', session.colabSession], 10000);
+                    } catch (error) {
+                        console.log(`⚠️ Could not stop session remotely: ${error.message}`);
+                    }
+                    await cleanupSessionFolder(oldestSessionId);
+                    sessions.delete(oldestSessionId);
+                    console.log(`✅ Removed session ${oldestSessionId}`);
                 }
             }
+
+            console.log(`📝 New session request received with ${accelerator === 'NONE' ? 'CPU' : accelerator}`);
+            const sessionId = generateSessionId();
+            const colabSessionName = `colab_${sessionId.substring(0, 12)}`;
+
+            await createSessionFolder(sessionId);
             
-            if (oldestSessionId) {
-                console.log(`🗑️ Killing oldest session: ${oldestSessionId}`);
-                const session = sessions.get(oldestSessionId);
+            const initialData = {
+                sessionId: sessionId,
+                createdAt: new Date().toISOString(),
+                cells: [],
+                totalCells: 0,
+                totalExecutions: 0,
+                lastUpdated: new Date().toISOString()
+            };
+            const dataFile = path.join(path.join(SESSIONS_BASE_DIR, sessionId), 'session_data.json');
+            await fs.writeFile(dataFile, JSON.stringify(initialData, null, 2));
+            
+            console.log(`⏳ Creating Colab session: ${colabSessionName} with ${accelerator}`);
+            
+            try {
+                await runColabCli(['new', '--gpu', accelerator, '-s', colabSessionName], 60000);
+            } catch (error) {
+                // Check if it's a TooManyAssignmentsError or Precondition Failed
+                const errorMessage = error.message || '';
+                const stderr = error.stderr || '';
+                const combinedError = errorMessage + stderr;
+                
+                if (combinedError.includes('TooManyAssignmentsError') || 
+                    combinedError.includes('Precondition Failed') ||
+                    combinedError.includes('412')) {
+                    
+                    console.warn(`⚠️ Session limit reached, cleaning up oldest session...`);
+                    
+                    // Find and kill the oldest session
+                    let oldestSessionId = null;
+                    let oldestTime = Infinity;
+                    
+                    for (const [sessionId, session] of sessions.entries()) {
+                        if (session.lastActivity < oldestTime) {
+                            oldestTime = session.lastActivity;
+                            oldestSessionId = sessionId;
+                        }
+                    }
+                    
+                    if (oldestSessionId) {
+                        console.log(`🗑️ Killing oldest session: ${oldestSessionId}`);
+                        const session = sessions.get(oldestSessionId);
+                        try {
+                            await runColabCli(['stop', '-s', session.colabSession], 10000);
+                        } catch (e) {
+                            console.log(`⚠️ Could not stop session remotely: ${e.message}`);
+                        }
+                        await cleanupSessionFolder(oldestSessionId);
+                        sessions.delete(oldestSessionId);
+                        console.log(`✅ Removed session ${oldestSessionId}`);
+                        
+                        // Retry session creation
+                        retryCount++;
+                        if (retryCount < MAX_RETRIES) {
+                            console.log(`🔄 Retrying session creation (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+                            continue;
+                        }
+                    }
+                }
+                
+                // If not a limit error or retries exhausted, rethrow
+                throw error;
+            }
+            
+            sessions.set(sessionId, {
+                colabSession: colabSessionName,
+                createdAt: Date.now(),
+                lastActivity: Date.now(),
+                status: 'ready',
+                currentExecution: null,
+                folder: path.join(SESSIONS_BASE_DIR, sessionId),
+                hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
+                variant: variant,
+                gpu: gpu || null,
+                tpu: tpu || null
+            });
+
+            console.log(`✅ Session ${sessionId} created successfully`);
+            return res.json({
+                success: true,
+                sessionId: sessionId,
+                hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
+                variant: variant,
+                authUrl: null,
+                expiresIn: SESSION_TIMEOUT,
+                activeSessions: sessions.size,
+                maxSessions: MAX_SESSIONS,
+                message: `Session created with ${accelerator === 'NONE' ? 'CPU' : accelerator}`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Session creation attempt ${retryCount + 1} failed:`, error.message);
+            
+            // If this is a TooManyAssignmentsError and we haven't exceeded retries
+            const errorMessage = error.message || '';
+            const stderr = error.stderr || '';
+            const combinedError = errorMessage + stderr;
+            
+            if ((combinedError.includes('TooManyAssignmentsError') || 
+                 combinedError.includes('Precondition Failed') ||
+                 combinedError.includes('412')) && retryCount < MAX_RETRIES - 1) {
+                
+                // Clean up any partially created session folder
+                // The folder might not exist yet, but try anyway
                 try {
-                    await runColabCli(['stop', '-s', session.colabSession], 10000);
-                } catch (error) {
-                    console.log(`⚠️ Could not stop session remotely: ${error.message}`);
+                    const sessionId = generateSessionId(); // Placeholder
+                    await cleanupSessionFolder(sessionId);
+                } catch (e) {
+                    // Ignore cleanup errors
                 }
-                await cleanupSessionFolder(oldestSessionId);
-                sessions.delete(oldestSessionId);
-                console.log(`✅ Removed session ${oldestSessionId}`);
+                
+                retryCount++;
+                console.log(`🔄 Retrying session creation (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+                continue;
             }
+            
+            // If we've exhausted retries or it's a different error, return failure
+            return res.status(500).json({ 
+                error: 'Failed to create session', 
+                details: error.message,
+                retries: retryCount
+            });
         }
-
-        console.log(`📝 New session request received with ${accelerator === 'NONE' ? 'CPU' : accelerator}`);
-        const sessionId = generateSessionId();
-        const colabSessionName = `colab_${sessionId.substring(0, 12)}`;
-
-        await createSessionFolder(sessionId);
-        
-        const initialData = {
-            sessionId: sessionId,
-            createdAt: new Date().toISOString(),
-            cells: [],
-            totalCells: 0,
-            totalExecutions: 0,
-            lastUpdated: new Date().toISOString()
-        };
-        const dataFile = path.join(path.join(SESSIONS_BASE_DIR, sessionId), 'session_data.json');
-        await fs.writeFile(dataFile, JSON.stringify(initialData, null, 2));
-        
-        console.log(`⏳ Creating Colab session: ${colabSessionName} with ${accelerator}`);
-        await runColabCli(['new', '--gpu', accelerator, '-s', colabSessionName], 60000);
-        
-        sessions.set(sessionId, {
-            colabSession: colabSessionName,
-            createdAt: Date.now(),
-            lastActivity: Date.now(),
-            status: 'ready',
-            currentExecution: null,
-            folder: path.join(SESSIONS_BASE_DIR, sessionId),
-            hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
-            variant: variant,
-            gpu: gpu || null,
-            tpu: tpu || null
-        });
-
-        console.log(`✅ Session ${sessionId} created successfully`);
-        res.json({
-            success: true,
-            sessionId: sessionId,
-            hardware: accelerator === 'NONE' ? 'CPU' : accelerator,
-            variant: variant,
-            authUrl: null,
-            expiresIn: SESSION_TIMEOUT,
-            activeSessions: sessions.size,
-            maxSessions: MAX_SESSIONS,
-            message: `Session created with ${accelerator === 'NONE' ? 'CPU' : accelerator}`
-        });
-    } catch (error) {
-        console.error('❌ Session creation failed:', error.message);
-        res.status(500).json({ 
-            error: 'Failed to create session', 
-            details: error.message 
-        });
     }
 });
 
