@@ -49,6 +49,7 @@ const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS) || 3;
 const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT) || 3 * 60 * 60 * 1000;
 const EXECUTION_TIMEOUT = parseInt(process.env.EXECUTION_TIMEOUT) || 7200;
 const MAX_CODE_SIZE = parseInt(process.env.MAX_CODE_SIZE) || 3 * 1024 * 1024;
+const MAX_CODE_LENGTH = parseInt(process.env.MAX_CODE_LENGTH) || 100000;
 const COMPLETED_EXECUTIONS_TTL = parseInt(process.env.COMPLETED_EXECUTIONS_TTL) || 10 * 60 * 1000;
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL) || 15000;
 const SESSIONS_BASE_DIR = process.env.SESSIONS_BASE_DIR || path.join(os.tmpdir(), 'colab_sessions');
